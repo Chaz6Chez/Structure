@@ -14,12 +14,7 @@
     ],
     "autoload": {
         "psr-4": {
-            "Structure\\": "lib/Structure"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "Test\\": "test/",
+            "Structure\\": "lib/Structure",
             "Example\\": "examples/"
         }
     },
