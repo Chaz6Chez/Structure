@@ -6,87 +6,31 @@
 # -------------------------- #
 namespace Structure;
 
+use Structure\Helper\Keys;
+
 class Struct {
-    # 数值过滤
-    const OPERATER_CLOASE        = 0; # 默认关闭
-    const OPERATER_LOAD_OUTPUT   = 1; # 装载输出
-    const OPERATER_FILTER_OUTPUT = 2; # 过滤输出
-    # 参数过滤 []
-    const FILTER_NORMAL = 0; # 默认不过滤
-    const FILTER_NULL   = 1; # 过滤NULL
-    const FILTER_EMPTY  = 2; # 过滤空字符串
-    const FILTER_STRICT = 3; # 严格过滤
-    const FILTER_KEY    = 4; # 仅输出KEY字段
-    # 输出转换
-    const OUTPUT_NORMAL = 0; # 默认输出
-    const OUTPUT_NULL   = 1; # 空字符串转NULL
-    const OUTPUT_EMPTY  = 2; # NULL转空字符串
-    const OUTPUT_KEY    = 3; # 仅输出KEY字段
 
-# ------------------- set start ----------------
-    /**
-     * 子类继承重写
-     *
-     * @var bool 是否将空字符串转换成null
-     */
     protected $_empty_to_null = true;
+    protected $_operator      = Keys::OPERATER_CLOASE;
+    protected $_keys          = null;
 
-    /**
-     * @var int 特殊值的处理
-     */
-    protected $_operator = self::OPERATER_CLOASE;
-# -------------------- set end ------------------
-
-# -------------------- preg start ---------------
     /**
      * @var string 操作者正则 [用于特殊赋值的过滤和操作] [column仅做了包含性判断]
      */
-    private $_operatorPreg = '/(?<column>[-.a-zA-Z0-9_]+)(\[(?<operator>\+|\-|\*|\/)\])?/i';
+    private $_operatorPreg    = '/(?<column>[-.a-zA-Z0-9_]+)(\[(?<operator>\+|\-|\*|\/)\])?/i';
     /**
      * @var string 手术刀正则 [注解]
      */
-    private $_scalpelPreg = '/@(default|rule|required|skip|ghost|key)(?:\[(\w+)\])?\s+?(.+)/';
-# -------------------- preg end -----------------
+    private $_scalpelPreg      = '/@(default|rule|required|skip|ghost|key)(?:\[(\w+)\])?\s+?(.+)/';
 
-# -------------- scalpe info start --------------
-    /**
-     * @var array 验证信息
-     */
+
     protected $_validate = [];
-
-    /**
-     * @var array 错误
-     */
-    protected $_errors = [];
-
-    /**
-     * @var array 错误码
-     */
-    protected $_codes = [];
-
-    /**
-     * @var string 当前场景
-     */
-    protected $_scene = '';
-
-    /**
-     * @var string Rule内容键
-     * rule content key
-     */
-    protected $_rck = '';
-
-    /**
-     * @var string Rule内容
-     * rule content string
-     */
-    protected $_rcs = '';
-
-    /**
-     * @var array Rule内容配置
-     * rule content options
-     */
-    protected $_rco = [];
-# -------------- scalpe info end ----------------
+    protected $_errors   = [];
+    protected $_codes    = [];
+    protected $_scene    = '';
+    protected $_rck      = ''; # rule content key
+    protected $_rcs      = ''; # rule content string
+    protected $_rco      = []; # rule content options
 
     /**
      * Struct constructor.
@@ -104,6 +48,16 @@ class Struct {
     }
 
     /**
+     * @return Keys
+     */
+    public function Keys(){
+        if(!$this->_keys instanceof Keys){
+            return $this->_keys = new Keys();
+        }
+        return $this->_keys;
+    }
+
+    /**
      * @param $var
      * @param Struct $struct
      * @return false|int|string
@@ -111,7 +65,7 @@ class Struct {
     public function getVariableName(&$var,Struct $struct){
         $tmp = $var;
         $var = 'tmp_value_'.mt_rand();
-        $name = array_search($var, $struct->toArray());
+        $name = array_search($var, $struct->outputArray());
         $var = $tmp;
         return $name;
     }
@@ -128,11 +82,11 @@ class Struct {
 
     /**
      * 设置过滤类型
-     * @param int $operater
+     * @param int $operator
      * @return $this
      */
-    public function setOperator(int $operater){
-        $this->_operator = $operater;
+    public function setOperator(int $operator){
+        $this->_operator = $operator;
         return $this;
     }
 
@@ -148,7 +102,7 @@ class Struct {
      */
     public function cleanSet(){
         $this->_empty_to_null = true;
-        $this->_operator = self::OPERATER_CLOASE;
+        $this->_operator      = Keys::OPERATER_CLOASE;
     }
 
     /**
@@ -173,82 +127,9 @@ class Struct {
     }
 
     /**
-     * 返回数组格式的数据
-     * @param bool $filterNull 过滤NULL的开关 默认不过滤
-     * @param bool $nullToEmpty NULL转换空字符串 默认不转换
-     * @return array
-     */
-    public function toArray($filterNull = false,$nullToEmpty = false) {
-        $fields = $this->_getFields();
-        $_data = [];
-        foreach ($fields as $f) {
-            $f = $f->getName();
-
-            if ($this->_isGhostField($f)) {
-                continue; # 排除鬼魂字段
-            }
-
-            if ($filterNull && !is_array($this->$f)) {
-                if (is_null($this->$f)) {
-                    continue; # 过滤null字段
-                }
-
-                if ($this->_isSkipField($f)) {
-                    continue; # 排除skip字段
-                }
-            }
-            if($this->_empty_to_null){
-                $value = ($nullToEmpty and $this->$f === null) ? '' : $this->$f;
-            }else{
-                $value = ($this->$f === null) ? '' : $this->$f;
-            }
-
-            $res = $this->_parsingOperator($f,$value);
-            $_data[$res[0]] = $res[1];
-        }
-        $this->cleanSet();
-        return $_data;
-    }
-
-    /**
-     * 较严格的返回数组数据 (默认过滤空字符串)
+     * key输出
      * @param bool $filterNull
-     * @return array
-     */
-    public function toArrayStrict($filterNull = false){
-        $fields = $this->_getFields();
-        $_data = [];
-        foreach ($fields as $f) {
-            $f = $f->getName();
-
-            if ($this->_isGhostField($f)) {
-                continue; # 排除鬼魂字段
-            }
-            if(!is_array($this->$f)){
-                if ($this->$f === '') {
-                    continue; # 过滤空字符串
-                }
-                if ($filterNull){
-                    if (is_null($this->$f)) {
-                        continue; # 过滤null字段
-                    }
-                    if ($this->_isSkipField($f)) {
-                        continue; # 排除skip字段
-                    }
-                }
-            }
-
-            $res = $this->_parsingOperator($f,$this->$f);
-            $_data[$res[0]] = $res[1];
-        }
-        $this->cleanSet();
-        return $_data;
-    }
-
-    /**
-     * 数组输出 [仅输出@key]
-     * @param bool $filterNull
-     * @param string $scene 场景
+     * @param string $scene
      * @return array
      */
     public function outputArrayByKey($filterNull = false,$scene = ''){
@@ -276,12 +157,13 @@ class Struct {
     }
 
     /**
-     * 数组输出 [新版]
+     * 输出
      * @param int $filter
      * @param int $output
+     * @param string $scene
      * @return array
      */
-    public function outputArray($filter = self::FILTER_NORMAL,$output = self::OUTPUT_NORMAL,$secen = ''){
+    public function outputArray($filter = Keys::FILTER_NORMAL,$output = Keys::OUTPUT_NORMAL,$scene = ''){
         $fields = $this->_getFields();
         $_data = [];
         foreach ($fields as $f) {
@@ -293,14 +175,14 @@ class Struct {
 
             if (!is_array($this->$f)){
                 switch ($filter){
-                    case self::FILTER_KEY:
+                    case Keys::FILTER_KEY:
                         if (
-                            !$this->_isKeyField($this->$f,$secen)
+                            !$this->_isKeyField($this->$f,$scene)
                         ) {
                             continue 2;
                         }
                         break;
-                    case self::FILTER_STRICT:
+                    case Keys::FILTER_STRICT:
                         if (
                             is_null($this->$f) or
                             $this->$f === '' or
@@ -309,7 +191,7 @@ class Struct {
                             continue 2;
                         }
                         break;
-                    case self::FILTER_NULL:
+                    case Keys::FILTER_NULL:
                         if (
                             is_null($this->$f) or
                             $this->_isSkipField($f)
@@ -317,7 +199,7 @@ class Struct {
                             continue 2;
                         }
                         break;
-                    case self::FILTER_EMPTY:
+                    case Keys::FILTER_EMPTY:
                         if (
                             $this->$f === '' or
                             $this->_isSkipField($f)
@@ -325,20 +207,20 @@ class Struct {
                             continue 2;
                         }
                         break;
-                    case self::FILTER_NORMAL:
+                    case Keys::FILTER_NORMAL:
                     default:
                         break;
                 }
             }
 
             switch ($output){
-                case self::OUTPUT_NULL:
+                case Keys::OUTPUT_NULL:
                     $value = $this->$f === '' ? null : $this->$f;
                     break;
-                case self::OUTPUT_EMPTY:
+                case Keys::OUTPUT_EMPTY:
                     $value = is_null($this->$f) ? '' : $this->$f;
                     break;
-                case self::OUTPUT_NORMAL:
+                case Keys::OUTPUT_NORMAL:
                 default:
                     $value = $this->$f;
                     break;
@@ -352,7 +234,7 @@ class Struct {
     }
 
     /**
-     * 批量赋值字段
+     * 添加
      * @param array $data
      * @param bool $validate
      * @return bool
@@ -383,9 +265,9 @@ class Struct {
 
         return true;
     }
-    
+
     /**
-     * 清空
+     * 清理
      * @return bool
      */
     public function clean(){
@@ -411,7 +293,7 @@ class Struct {
         }
 
         if (is_null($data)) {
-            $data = $this->toArray();
+            $data = $this->outputArray();
         }
 
         $passed = true;
@@ -614,14 +496,6 @@ class Struct {
                                 $this->_rck = isset($rca[0]) ? trim($rca[0]) : '';
                                 $this->_rcs = isset($rca[1]) ? trim($rca[1]) : '';
 
-//                            foreach ($rca as $k => $o){
-//                                if($k == 0){
-//                                    continue;
-//                                }
-//                                $o = explode(':', $o, 2);
-//                                $this->_rco[$o[0]] = $o[1];
-//                            }
-
                                 $rule = [];
                                 switch (true) {
                                     case $this->_rck === 'func': # 调用函数验证,传入当前字段的值
@@ -682,7 +556,7 @@ class Struct {
     private function _parsingOperator($key,$value){
         if($value){
             switch ($this->_operator){
-                case self::OPERATER_LOAD_OUTPUT:
+                case Keys::OPERATER_LOAD_OUTPUT:
                     $valueArr = explode('|',$value);
                     if(count($valueArr) > 1){
                         foreach ($valueArr as $value){
@@ -701,14 +575,14 @@ class Struct {
                     }
                     break;
 
-                case self::OPERATER_FILTER_OUTPUT:
+                case Keys::OPERATER_FILTER_OUTPUT:
                     $match = $this->_operatorPreg($value);
                     if(isset($match['column'])){
                         $value = $match['column'];
                     }
                     break;
 
-                case self::OPERATER_CLOASE:
+                case Keys::OPERATER_CLOASE:
                 default:
 
                     break;
@@ -721,7 +595,6 @@ class Struct {
     /**
      * 反射获取对象属性
      * @return \ReflectionProperty[]
-     * @throws \ReflectionException
      */
     private function _getFields() {
         $class = new \ReflectionClass($this);
