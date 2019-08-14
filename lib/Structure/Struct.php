@@ -8,123 +8,8 @@ namespace Structure;
 
 use Structure\Helper\Keys;
 
-class Struct {
+class Struct extends Core {
 
-    protected $_empty_to_null = true;
-    protected $_operator      = Keys::OPERATER_CLOASE;
-    protected $_keys          = null;
-
-    /**
-     * @var string 操作者正则 [用于特殊赋值的过滤和操作] [column仅做了包含性判断]
-     */
-    private $_operatorPreg    = '/(?<column>[-.a-zA-Z0-9_]+)(\[(?<operator>\+|\-|\*|\/)\])?/i';
-    /**
-     * @var string 手术刀正则 [注解]
-     */
-    private $_scalpelPreg      = '/@(default|rule|required|skip|ghost|key)(?:\[(\w+)\])?\s+?(.+)/';
-
-
-    protected $_validate = [];
-    protected $_errors   = [];
-    protected $_codes    = [];
-    protected $_scene    = '';
-    protected $_rck      = ''; # rule content key
-    protected $_rcs      = ''; # rule content string
-    protected $_rco      = []; # rule content options
-
-    /**
-     * Struct constructor.
-     * @param null $data
-     * @param string $scene
-     * @throws \ReflectionException
-     */
-    public function __construct($data = null, $scene = '') {
-        $this->_scalpel();                       # 加载手术刀
-        $this->setScene($scene);                 # 加载场景
-        $this->_setDefault();                    # 加载默认值
-        if ($data and is_array($data)) {
-            $this->create($data, false); # 创建数据
-        }
-    }
-
-    /**
-     * @return Keys
-     */
-    public function Keys(){
-        if(!$this->_keys instanceof Keys){
-            return $this->_keys = new Keys();
-        }
-        return $this->_keys;
-    }
-
-    /**
-     * @param $var
-     * @param Struct $struct
-     * @return false|int|string
-     */
-    public function getVariableName(&$var,Struct $struct){
-        $tmp = $var;
-        $var = 'tmp_value_'.mt_rand();
-        $name = array_search($var, $struct->outputArray());
-        $var = $tmp;
-        return $name;
-    }
-
-    /**
-     * 设置empty to null
-     * @param bool $bool
-     * @return $this
-     */
-    public function emptyToNull(bool $bool){
-        $this->_empty_to_null = $bool;
-        return $this;
-    }
-
-    /**
-     * 设置过滤类型
-     * @param int $operator
-     * @return $this
-     */
-    public function setOperator(int $operator){
-        $this->_operator = $operator;
-        return $this;
-    }
-
-    /**
-     * @return int
-     */
-    public function getOperator(){
-        return $this->_operator;
-    }
-
-    /**
-     * 重置设置项
-     */
-    public function cleanSet(){
-        $this->_empty_to_null = true;
-        $this->_operator      = Keys::OPERATER_CLOASE;
-    }
-
-    /**
-     * 获得模型实例,此操作未作数据验证
-     * @param null|array $data
-     * @param string $scene 场景
-     * @return static
-     */
-    public static function factory($data = null, $scene = '') {
-        $cls = get_called_class();
-        return new $cls($data, $scene);
-    }
-
-    /**
-     * 设置场景
-     * @param $scene
-     * @return $this
-     */
-    public function setScene($scene) {
-        $this->_scene = $scene;
-        return $this;
-    }
 
     /**
      * key输出
@@ -133,26 +18,27 @@ class Struct {
      * @return array
      */
     public function outputArrayByKey($filterNull = false,$scene = ''){
-        $fields = $this->_getFields();
+        $fields = $this->getFields();
         $_data = [];
+        if($fields !== false){
+            foreach ($fields as $f) {
+                $f = $f->getName();
+                if (!$this->_isKeyField($f,$scene)) {
+                    continue; # 排除非key字段
+                }
 
-        foreach ($fields as $f) {
-            $f = $f->getName();
-            if (!$this->_isKeyField($f,$scene)) {
-                continue; # 排除非key字段
-            }
-
-            if(!is_array($this->$f)){
-                if ($filterNull){
-                    if (is_null($this->$f)) {
-                        continue; # 过滤null字段
+                if(!is_array($this->$f)){
+                    if ($filterNull){
+                        if (is_null($this->$f)) {
+                            continue; # 过滤null字段
+                        }
                     }
                 }
+                $res = $this->_parsingOperator($f,$this->$f);
+                $_data[$res[0]] = $res[1];
             }
-            $res = $this->_parsingOperator($f,$this->$f);
-            $_data[$res[0]] = $res[1];
         }
-        $this->cleanSet();
+        $this->settingReset();
         return $_data;
     }
 
@@ -164,72 +50,74 @@ class Struct {
      * @return array
      */
     public function outputArray($filter = Keys::FILTER_NORMAL,$output = Keys::OUTPUT_NORMAL,$scene = ''){
-        $fields = $this->_getFields();
+        $fields = $this->getFields();
         $_data = [];
-        foreach ($fields as $f) {
-            $f = $f->getName();
+        if($fields !== false){
+            foreach ($fields as $f) {
+                $f = $f->getName();
 
-            if ($this->_isGhostField($f)) {
-                continue; # 排除鬼魂字段
-            }
+                if ($this->_isGhostField($f)) {
+                    continue; # 排除鬼魂字段
+                }
 
-            if (!is_array($this->$f)){
-                switch ($filter){
-                    case Keys::FILTER_KEY:
-                        if (
+                if (!is_array($this->$f)){
+                    switch ($filter){
+                        case Keys::FILTER_KEY:
+                            if (
                             !$this->_isKeyField($this->$f,$scene)
-                        ) {
-                            continue 2;
-                        }
+                            ) {
+                                continue 2;
+                            }
+                            break;
+                        case Keys::FILTER_STRICT:
+                            if (
+                                is_null($this->$f) or
+                                $this->$f === '' or
+                                $this->_isSkipField($f)
+                            ) {
+                                continue 2;
+                            }
+                            break;
+                        case Keys::FILTER_NULL:
+                            if (
+                                is_null($this->$f) or
+                                $this->_isSkipField($f)
+                            ) {
+                                continue 2;
+                            }
+                            break;
+                        case Keys::FILTER_EMPTY:
+                            if (
+                                $this->$f === '' or
+                                $this->_isSkipField($f)
+                            ) {
+                                continue 2;
+                            }
+                            break;
+                        case Keys::FILTER_NORMAL:
+                        default:
+                            break;
+                    }
+                }
+
+                switch ($output){
+                    case Keys::OUTPUT_NULL:
+                        $value = $this->$f === '' ? null : $this->$f;
                         break;
-                    case Keys::FILTER_STRICT:
-                        if (
-                            is_null($this->$f) or
-                            $this->$f === '' or
-                            $this->_isSkipField($f)
-                        ) {
-                            continue 2;
-                        }
+                    case Keys::OUTPUT_EMPTY:
+                        $value = is_null($this->$f) ? '' : $this->$f;
                         break;
-                    case Keys::FILTER_NULL:
-                        if (
-                            is_null($this->$f) or
-                            $this->_isSkipField($f)
-                        ) {
-                            continue 2;
-                        }
-                        break;
-                    case Keys::FILTER_EMPTY:
-                        if (
-                            $this->$f === '' or
-                            $this->_isSkipField($f)
-                        ) {
-                            continue 2;
-                        }
-                        break;
-                    case Keys::FILTER_NORMAL:
+                    case Keys::OUTPUT_NORMAL:
                     default:
+                        $value = $this->$f;
                         break;
                 }
-            }
 
-            switch ($output){
-                case Keys::OUTPUT_NULL:
-                    $value = $this->$f === '' ? null : $this->$f;
-                    break;
-                case Keys::OUTPUT_EMPTY:
-                    $value = is_null($this->$f) ? '' : $this->$f;
-                    break;
-                case Keys::OUTPUT_NORMAL:
-                default:
-                    $value = $this->$f;
-                    break;
+                $res = $this->_parsingOperator($f,$value);
+                $_data[$res[0]] = $res[1];
             }
-
-            $res = $this->_parsingOperator($f,$value);
-            $_data[$res[0]] = $res[1];
         }
-        $this->cleanSet();
+        $this->settingReset();
         return $_data;
     }
 
@@ -240,44 +128,34 @@ class Struct {
      * @return bool
      */
     public function create(array $data, $validate = true) {
-        $fields = $this->_getFields();
+        $fields = $this->getFields();
         $_data = [];
-        foreach ($fields as $f) {
-            $f = $f->getName();
-            if($this->_empty_to_null){
-                $_data[$f] = (isset($data[$f]) and $data[$f] !== '') ? $data[$f] : $this->$f;
-            }else{
-                $_data[$f] = isset($data[$f]) ? $data[$f] : $this->$f;
+        if($fields !== false){
+            foreach ($fields as $f) {
+                $f = $f->getName();
+                if($this->getEmptyOrNull()){
+                    $_data[$f] = (isset($data[$f]) and $data[$f] !== '') ? $data[$f] : $this->$f;
+                }else{
+                    $_data[$f] = isset($data[$f]) ? $data[$f] : $this->$f;
+                }
             }
-        }
 
-        # 赋值
-        foreach ($_data as $f => $d) {
-            $this->$f = $d;
-        }
+            # 赋值
+            foreach ($_data as $f => $d) {
+                $this->$f = $d;
+            }
 
-        # 验证
-        if ($validate) {
-            if (!$this->validate($_data)) {
-                return false;
+            # 验证
+            if ($validate) {
+                if (!$this->validate($_data)) {
+                    return false;
+                }
             }
         }
 
         return true;
     }
 
-    /**
-     * 清理
-     * @return bool
-     */
-    public function clean(){
-        $fields = $this->_getFields();
-        foreach ($fields as $f) {
-            $f = $f->getName();
-            $this->$f = null;
-        }
-        return true;
-    }
 
     /**
      * 验证器
@@ -308,7 +186,7 @@ class Struct {
             # 必填值验证
             if (isset($v['required'])) {
                 foreach ($v['required'] as $req) {
-                    if ($this->_checkScene($req['scene'])) {
+                    if ($this->_validateScene($req['scene'])) {
                         if (
                             !isset($data[$f]) or
                             $data[$f] === ''
@@ -323,7 +201,7 @@ class Struct {
             # 规则验证
             if (isset($data[$f]) && $data[$f] !== '' && isset($v['rule'])) {
                 foreach ($v['rule'] as $r) {
-                    if ($this->_checkScene($r['scene'])) {
+                    if ($this->_validateScene($r['scene'])) {
                         $validator = $r['content'];
 
                         # 创建错误(校验过程)
@@ -349,6 +227,21 @@ class Struct {
         }
 
         return $passed;
+    }
+
+    /**
+     * 清空
+     * @return bool
+     */
+    public function clean(){
+        $fields = $this->getFields();
+        if($fields !== false){
+            foreach ($fields as $f) {
+                $f = $f->getName();
+                $this->$f = null;
+            }
+        }
+        return true;
     }
 
     /**
@@ -394,318 +287,6 @@ class Struct {
      */
     public function getCodes() {
         return $this->_codes ? $this->_codes : [];
-    }
-
-    /**
-     * 手术刀
-     * 分析验证规则
-     */
-    private function _scalpel() {
-        $fields = false;
-        try{
-            $fields = $this->_getFields();
-        }catch (\ReflectionException $e){
-            $this->_errors[0] = $e;
-        }
-        if($fields){
-            foreach ($fields as $f) {
-                # 信息获取阶段
-                $name = $f->getName(); # 字段名称
-                $comment = $f->getDocComment(); # 字段规则注释
-                # 默认正则结果
-                $matches = null;
-                if ($comment) {
-                    # 正则筛选指令
-                    preg_match_all($this->_scalpelPreg, $comment, $matches);
-                    $this->_validate[$name] = [];
-
-                    # 跳过未有指令的内容
-                    if (!$matches) {
-                        continue;
-                    }
-
-                    for ($i = 0; $i < count($matches[0]); $i++) {
-                        $rn = trim($matches[1][$i]); # 指令名称
-                        $rs = trim($matches[2][$i]); # 指令场景
-                        $rc = trim($matches[3][$i]); # 规则内容
-
-                        switch ($rn) {
-                            # 跳过
-                            case 'skip':
-                                $this->_setValidate('skip',$name,$rs);
-                                break;
-                            # 鬼魂字段
-                            case 'ghost':
-                                $this->_setValidate('ghost',$name,$rs);
-                                break;
-                            # key字段
-                            case 'key':
-                                $this->_setValidate('key',$name,$rs);
-                                break;
-                            # 默认值
-                            case 'default':
-                                $rc = explode(':', $rc, 2);
-                                $t = trim($rc[0]); # 类型:int,float,null,string
-                                $v = isset($rc[1]) ? trim($rc[1]) : null; # 值
-
-                                if (!is_null($v)) {
-                                    switch ($t) {
-                                        case 'int':
-                                            $v = intval($v);
-                                            break;
-                                        case 'float':
-                                            $v = floatval($v);
-                                            break;
-                                        case 'null':
-                                            $v = null;
-                                            break;
-                                        case 'func':
-                                            $v = call_user_func($v);
-                                            break;
-                                        case 'method':
-                                            $v = call_user_func_array([$this, $v], []);
-                                            break;
-                                        case 'array':
-                                            $v = json_decode($v, true);
-                                            break;
-                                        case 'bool':
-                                            $v = $v === 'true' ? true : false;
-                                            break;
-                                        default:
-                                            $v = strval($v);
-                                            break;
-                                    }
-
-                                    $this->_setValidate('default',$name,[
-                                        'content' => $v,
-                                        'scene' => $rs
-                                    ],false);
-                                }
-
-                                break;
-
-                            # 规则
-                            case 'rule':
-                                $rc = explode('|', $rc, 2);
-                                $rc[0] = trim($rc[0]);
-
-                                $rca = explode(',', $rc[0]);
-                                if(count($rca) < 2){
-                                    $rca = explode(':',$rc[0]);
-                                }
-                                $this->_rck = isset($rca[0]) ? trim($rca[0]) : '';
-                                $this->_rcs = isset($rca[1]) ? trim($rca[1]) : '';
-
-                                $rule = [];
-                                switch (true) {
-                                    case $this->_rck === 'func': # 调用函数验证,传入当前字段的值
-                                        $rule['content'] = $this->_rcs;
-                                        break;
-                                    case $this->_rck === 'method': # 调用实例方法验证,传入当字段名称和值
-                                        $rule['content'] = [$this, $this->_rcs];
-                                        break;
-                                    default: # 默认调用验证库
-                                        $rule['content'] = Filter::factory($rc[0]);
-                                }
-
-                                $rule['error'] = isset($rc[1]) ? $rc[1] : "{$name}格式不正确";
-                                $rule['scene'] = $rs;
-
-                                # 设置Validate
-                                $this->_setValidate('rule',$name,$rule,false);
-
-                                break;
-
-                            # 必填字段
-                            case 'required':
-                                $rc = explode('|', $rc);
-
-                                # 设置Validate
-                                $this->_setValidate('required',$name,[
-                                    'content' => true,
-                                    'scene' => $rs,
-                                    'error' => isset($rc[1]) ? $rc[1] : "{$name}不能为空",
-                                ],false);
-                                break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * 过滤正则辅助
-     * @param $value
-     * @return mixed
-     */
-    private function _operatorPreg($value){
-        preg_match($this->_operatorPreg, $value, $match);
-        return $match;
-    }
-
-    /**
-     * 分析operator
-     * @param $key
-     * @param $value
-     * @return array
-     *
-     * key   = array[0]
-     * value = array[1]
-     */
-    private function _parsingOperator($key,$value){
-        if($value){
-            switch ($this->_operator){
-                case Keys::OPERATER_LOAD_OUTPUT:
-                    $valueArr = explode('|',$value);
-                    if(count($valueArr) > 1){
-                        foreach ($valueArr as $value){
-                            $match = $this->_operatorPreg($value);
-                            if(isset($match['operator'])){
-                                $key = "{$key}[{$match['operator']}]";
-                                $value = $match['column'];
-                            }
-                        }
-                    }else{
-                        $match = $this->_operatorPreg($value);
-                        if(isset($match['operator'])){
-                            $key = "{$key}[{$match['operator']}]";
-                            $value = $match['column'];
-                        }
-                    }
-                    break;
-
-                case Keys::OPERATER_FILTER_OUTPUT:
-                    $match = $this->_operatorPreg($value);
-                    if(isset($match['column'])){
-                        $value = $match['column'];
-                    }
-                    break;
-
-                case Keys::OPERATER_CLOASE:
-                default:
-
-                    break;
-            }
-        }
-
-        return [$key,$value];
-    }
-
-    /**
-     * 反射获取对象属性
-     * @return \ReflectionProperty[]
-     */
-    private function _getFields() {
-        $class = new \ReflectionClass($this);
-        return $class->getProperties(\ReflectionProperty::IS_PUBLIC);
-    }
-
-    /**
-     * 设置字段默认值
-     */
-    private function _setDefault() {
-        if ($this->_validate) {
-            foreach ($this->_validate as $f => $v) {
-                if (isset($v['default'])) {
-                    foreach ($v['default'] as $def) {
-                        if ($this->_checkScene($def['scene'])) {
-                            $this->$f = $def['content'];
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * 检查是适用当前场景
-     * @param $scene
-     * @return bool
-     */
-    private function _checkScene($scene) {
-        # 如果设置了当前场景,那么当前场景的设置或者未指定场景的指令会被应用
-        # 否者,只有未指定场景的指令会被应用
-        return $scene == '' or $this->_scene == $scene;
-    }
-
-    /**
-     * 是否为魔鬼字段
-     * @param $field
-     * @return bool
-     */
-    private function _isGhostField($field) {
-        if (isset($this->_validate[$field]['ghost'])) {
-            foreach ($this->_validate[$field]['ghost'] as $v) {
-                if ($this->_checkScene($v['scene'])) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 是否为跳过的字段
-     * @param $field
-     * @return bool
-     */
-    private function _isSkipField($field) {
-        if (isset($this->_validate[$field]['skip'])) {
-            foreach ($this->_validate[$field]['skip'] as $v) {
-                if ($this->_checkScene($v['scene'])) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 是否为key的字段
-     * @param $field
-     * @param string $scene
-     * @return bool
-     */
-    private function _isKeyField($field,$scene = '') {
-        if (isset($this->_validate[$field]['key'])) {
-            if($scene){
-                foreach ($this->_validate[$field]['key'] as $v) {
-                    if (isset($v['sence']) and $v['sence'] == $scene) {
-                        return true;
-                    }
-                }
-            }
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * 设置验证内容
-     * @param $tag
-     * @param $name
-     * @param $value
-     * @param bool $isScene 是否仅传递scene
-     */
-    private function _setValidate($tag,$name,$value,$isScene = true){
-        if (!isset($this->_validate[$name][$tag])) {
-            $this->_validate[$name][$tag] = [];
-        }
-        $this->_validate[$name][$tag][] = $isScene ? [
-            'scene' => $value
-        ] : $value;
-    }
-
-    /**
-     * 添加错误
-     * @param string $field
-     * @param string $error
-     */
-    private function _addError($field, $error) {
-        $error = explode(':',$error);
-        $this->_errors[$field] = $error[0];
-        $this->_codes[$field] = isset($error[1]) ? $error[1] : '500';
     }
 
 }
