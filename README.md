@@ -1,14 +1,19 @@
 # structure
 
-## v1.0.0
+## 更新内容
 
+##### 2019-08-14 
+ - 【移除】toArray方法群
+ - 【调整】类结构优化，内部方法表达调整
+ - 【调整】将常量标准参移至Helper/Keys
+ - 【新增】@operator标签
 
-一个没什么用的验证器
+## v2.0.0
 
 有什么好的建议和想法，请联系250220719@qq.com
 ***
 ## 使用场景
- - 接口入参、出参的筛选
+ - 接口入参、出参的验证筛选
  - 服务组件的入参结构体
  - 数据库映射类
 
@@ -27,7 +32,8 @@
 | @rule | 类型、func、method | 以func与method的bool返回类型判断验证 |
 | @skip | 无 | 跳过验证 |
 | @ghost| 无 | 跳过输出 |
-| @key| 无 | 与toArrayKey()方法配套 |
+| @key| 无 | 配合标记输出 |
+| @operator| 无 | 配合输出过滤/装载 |
 
 ````
 /**
@@ -36,6 +42,8 @@
  * @skip                           ->  跳过验证(不执行该字段所有限制条件,toArray()默认输出，toArray(true)时过滤)
  * @ghost                          ->  跳过输出(执行限制条件,toArray输出过滤该字段)
  * @rule string,min:10,max:20|XXXX ->  验证规则,使用filter库/使用方法/使用实例验证规则
+ * @key                            ->  输出标记
+ * @operator                       ->  装载/过滤标记
  */
 ````
 ***
@@ -45,8 +53,6 @@
 | :---: | :---: | :---| 
 |   factory($data,$scene)| data:数据(可选) scene:场景(可选) | 实例化方法,可加载数据和场景 |
 |   setScene($scene)| scene:场景 | 设置场景,在验证方法之前调用有效 |
-|   toArray($filterNull)| filterNull:是否过滤空值(可选) | 数据以数组形式输出（不过滤空字符串） |
-|   toArrayStrict($filterNull)| filterNull:是否过滤空值(可选) | 数据以数组形式输出（过滤空字符串） |
 |   outputArrayByKey($filterNull,$scene)| filterNull:是否过滤空值(可选) scene:场景 | 数据以数组形式输出（不过滤空字符串） |
 |   create($data,$validate)| data:数据 validate:是否执行验证(可选) | 输入数据,可执行验证 |
 |   validate($data)| data:数据(可选) | 验证器方法,可加载数据 |
@@ -74,29 +80,4 @@
         }
         $this->response->success($structure->toArray());
 
-````
-- 方式二
-````    
-        // 与方式一数据内容相同
-        $structure = \Test\Check::factory($data,'login');
-        $structure->validate();
-        // 与方式一判断相同
-````
-- 方式三
-````    
-        // 与方式一数据内容相同
-        $structure = \Test\Check::factory();
-        $structure->setScene('login');
-        $structure->validate($data);
-        // 与方式一判断相同
-````
-***
-## 说明
-
-````
-# 1.所有验证标签均可使用[XXX]场景化区分.
-# 2.filter库可修改库类文件提供默认验证规则.
-# 3.修改Handle下类库文件的_defaultOptions数据,可以更改默认规则.
-# 4.default标签可使用func和method,与rule区别是:
-# rule使用其返回true or false来进行判断,default直接使用其返回值.
 ````
