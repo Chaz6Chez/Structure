@@ -125,9 +125,13 @@ class Struct extends Core {
      * 添加
      * @param array $data
      * @param bool $validate
+     * @param bool $clean
      * @return bool
      */
-    public function create(array $data, $validate = true) {
+    public function create(array $data, $validate = true, $clean = false) {
+        if($clean){
+            $this->clean();
+        }
         $fields = $this->getFields();
         $_data = [];
         if($fields !== false){

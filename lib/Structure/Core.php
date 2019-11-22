@@ -17,11 +17,11 @@ abstract class Core {
     /**
      * @var string 操作者正则 [用于特殊赋值的过滤和操作] [column仅做了包含性判断]
      */
-    private $_operatorPreg    = '/(?<column>[-.a-zA-Z0-9_]+)(\[(?<operator>\+|\-|\*|\/)\])?/i';
+    private $_operatorPreg = '/(?<column>[\s\S]*(?=\[(?<operator>\+|\-|\*|\/|\>\=?|\<\=?|\!|\<\>|\>\<|\!?~)\]$)|[\s\S]*)/';
     /**
      * @var string 手术刀正则 [注解]
      */
-    private $_scalpelPreg      = '/@(default|rule|required|skip|ghost|key|operator)(?:\[(\w+)\])?\s+?(.+)/';
+    private $_scalpelPreg  = '/@(default|rule|required|skip|ghost|key|operator)(?:\[(\w+)\])?\s+?(.+)/';
 
     protected $_validate = [];
     protected $_errors   = [];
@@ -394,11 +394,15 @@ abstract class Core {
      * @return bool
      */
     protected function _isOperatorField($field) {
-        if (
-            isset($this->_validate[$field]['operator']) or
-            !$this->_operatorNeedTag
-        ) {
+        if(!$this->_operatorNeedTag){
             return true;
+        }
+        if (isset($this->_validate[$field]['operator'])) {
+            foreach ($this->_validate[$field]['operator'] as $v) {
+                if ($this->_validateScene($v['scene'])) {
+                    return true;
+                }
+            }
         }
         return false;
     }
@@ -429,10 +433,11 @@ abstract class Core {
         if (isset($this->_validate[$field]['key'])) {
             if($scene){
                 foreach ($this->_validate[$field]['key'] as $v) {
-                    if (isset($v['scene']) and $v['scene'] == $scene) {
+                    if ($v['scene'] == '' or $v['scene'] == $scene) {
                         return true;
                     }
                 }
+                return false;
             }
             return true;
         }

@@ -5,11 +5,9 @@
 #  Date: 2018/9/6            #
 # -------------------------- #
 namespace Structure;
+use Structure\Helper\StructureException;
 
 abstract class Filter {
-
-    const INVALID_FILTER_SPECIFIED = '无效的过滤器: ';
-    const CLASS_MUST_BE_HANDLE_INSTANCE = '类名必须是Handle的实例';
 
     protected static $_filters = [
         'array'  => 'Structure\Handle\Arrays',
@@ -62,6 +60,11 @@ abstract class Filter {
      * @param $filter string 例：string,max:1
      * @return mixed
      */
+    /**
+     * @param $filter
+     * @return mixed
+     * @throws StructureException
+     */
     public static function factory($filter) {
         # 判断继承
         if ($filter instanceof self) {
@@ -72,7 +75,7 @@ abstract class Filter {
         $filterName = $res[0];
         $options = $res[1];
         if (!isset(self::$_filters[$filterName])) {
-            throw new \InvalidArgumentException(self::INVALID_FILTER_SPECIFIED . $filter);
+            throw new StructureException(StructureException::INVALID_FILTER_SPECIFIED . $filter);
         }
         $class = self::$_filters[$filterName];
         # 返回实例
@@ -86,7 +89,7 @@ abstract class Filter {
      */
     public static function register($name, $class) {
         if (!is_subclass_of($class, __CLASS__)) {
-            throw new \InvalidArgumentException(self::CLASS_MUST_BE_HANDLE_INSTANCE);
+            throw new StructureException(StructureException::CLASS_MUST_BE_HANDLE_INSTANCE);
         }
         self::$_filters[strtolower($name)] = $class;
     }
@@ -119,6 +122,7 @@ abstract class Filter {
         $this->_options = array_merge($this->_defaultOptions,$options);
         return $this;
     }
+    
     /**
      * 分析器
      * @param $filter
