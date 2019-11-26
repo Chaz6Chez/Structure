@@ -1,7 +1,6 @@
 {
     "name": "chaz6chez/structure",
     "description": "小型的数据映射过滤工具",
-    "version":"1.1",
     "require": {
         "php": ">=7.0.0"
     },
@@ -17,6 +16,5 @@
             "Structure\\": "lib/Structure",
             "Example\\": "examples/"
         }
-    },
-    "minimum-stability": "dev"
+    }
 }
