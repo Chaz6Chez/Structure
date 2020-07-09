@@ -17,7 +17,7 @@ class Struct extends Core {
      * @param string $scene
      * @return array
      */
-    public function outputArrayByKey($filterNull = false,$scene = ''){
+    public function outputArrayByKey($filterNull = false, $scene = '') : array {
         $fields = $this->getFields();
         $_data = [];
         if($fields !== false){
@@ -49,7 +49,7 @@ class Struct extends Core {
      * @param string $scene
      * @return array
      */
-    public function outputArray($filter = Keys::FILTER_NORMAL,$output = Keys::OUTPUT_NORMAL,$scene = ''){
+    public function outputArray($filter = Keys::FILTER_NORMAL, $output = Keys::OUTPUT_NORMAL, $scene = '') : array {
         $fields = $this->getFields();
         $_data = [];
         if($fields !== false){
@@ -128,7 +128,7 @@ class Struct extends Core {
      * @param bool $clean
      * @return bool
      */
-    public function create(array $data, $validate = true, $clean = false) {
+    public function create(array $data, $validate = true, $clean = false) : bool {
         if($clean){
             $this->clean();
         }
@@ -166,7 +166,7 @@ class Struct extends Core {
      * @param array|null $data
      * @return bool
      */
-    public function validate(array $data = null) {
+    public function validate(array $data = null) : bool {
         # 初始化错误记录
         $this->_errors = [];
 
@@ -237,7 +237,7 @@ class Struct extends Core {
      * 清空
      * @return bool
      */
-    public function clean(){
+    public function clean() : bool {
         $fields = $this->getFields();
         if($fields !== false){
             foreach ($fields as $f) {
@@ -251,13 +251,13 @@ class Struct extends Core {
     /**
      * 确认错误
      * @param null $filed
-     * @return bool|mixed
+     * @return bool
      */
-    public function hasError($filed = null) {
+    public function hasError($filed = null) : bool {
         if (is_null($filed)) {
             return count($this->_errors) > 0;
         } else {
-            return $this->_errors[$filed];
+            return isset($this->_errors[$filed]);
         }
     }
 
